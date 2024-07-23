@@ -24,7 +24,12 @@ def handle_button_click(button_id,img,cap,img_count):
 
 if __name__ == '__main__':
     # Title
-    st.header("Diabetic Retinopathy Segmentation Assistant",divider='gray')
+    title, img_icon = st.columns([0.7,0.3],vertical_alignment="bottom")
+    with title:
+        st.header("Diabetic Retinopathy Segmentation Assistant",divider='gray')
+    with img_icon: 
+        st.image("https://cdn-icons-png.flaticon.com/512/9031/9031971.png",width=150)
+
     # Short description on diabetic retinopathy. Find in text.py file
     st.markdown(dr_desc)
 
