@@ -23,4 +23,8 @@ ind_desc = """
 
                 Soft Exudates: Also known as cotton wool spots, are fluffy white patches 
                 on the retina caused by nerve fiber swelling due to inadequate blood supply.
+                
+                Optical Disk: The optic disc is where the optic nerve fibers exit the retina, 
+                appearing as a small, round, pale area. It transmits visual information from 
+                the retina to the brain.
                 """
