@@ -70,7 +70,7 @@ if __name__ == '__main__':
             st.session_state.images = []
             img = uploaded_file
             cap = "Displaying original eye image"
-            description = "Uploaded by the user to be segmented and analyzed"
+            description = "Uploaded by the user to be segmented and analyzed."
             st.session_state.images.append((img, cap, description))
             st.session_state.original_added = True
     # If empty reset the session states for images and buttons.
@@ -95,7 +95,7 @@ if __name__ == '__main__':
     # Creates first button, if pressed add images plus caption and description to session state image list
     if col1.button("Microaneurysms",use_container_width=True,help="Uploads image for microaneurysm detection") and uploaded_file is not None:
         # Run algorithm and get analyzed image
-        microaneurysms = extract_microaneurysms(uploaded_image)
+        microaneurysms = extract_microaneurysmsdet(uploaded_image)
         microaneurysms = Image.fromarray(microaneurysms)
         # Add caption and description and call button function
         caption = "Displaying microaneurysms in eye"
@@ -105,7 +105,7 @@ if __name__ == '__main__':
     # Creates second button, if pressed add images plus caption and description to session state image list
     if col2.button("Soft Exudates",use_container_width=True,help="Uploads image for soft exudate detection") and uploaded_file is not None:
         # Run algorithm and get analyzed image
-        soft_exudates = extract_microaneurysmsdet(uploaded_image)
+        soft_exudates = extract_microaneurysms(uploaded_image) # UPDATE THIS LINE TO INCLUDE SOFT EXUDATE EXTRACTION FUNCTION
         soft_exudates = Image.fromarray(soft_exudates)
         # Add caption and description and call button function
         caption = "Displaying soft exudates in eye"
@@ -130,7 +130,7 @@ if __name__ == '__main__':
         # Run algorithm and get analyzed image
         optical_disk_result = extract_opticdisk(uploaded_image)
         if isinstance(optical_disk_result, tuple):
-            optical_disk = optical_disk_result[0]  # Adjust this index based on your function's return value, changing it will change image output
+            optical_disk = optical_disk_result[2]  # Adjust this index based on your function's return value, changing it will change image output
         else:
             optical_disk = optical_disk_result
         optical_disk = Image.fromarray(optical_disk)
@@ -142,7 +142,7 @@ if __name__ == '__main__':
     # Creates fifth button, if pressed add images plus caption and description to session state image list
     if col5.button("Hard Exudates",use_container_width=True,help="Uploads image for hard exudates detection") and uploaded_file is not None:
         # Run algorithm and get analyzed image
-        hard_exudates = extract_microaneurysmsdet(uploaded_image)
+        hard_exudates = extract_microaneurysms(uploaded_image) # UPDATE THIS LINE TO INCLUDE HARD EXUDATE EXTRACTION FUNCTION
         hard_exudates = Image.fromarray(hard_exudates)
         # Add caption and description and call button function
         caption = "Displaying hard exudates in eye"
