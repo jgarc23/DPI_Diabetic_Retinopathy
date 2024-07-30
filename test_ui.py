@@ -1,4 +1,6 @@
 import streamlit as st
+import cv2
+import os
 from PIL import Image
 from microaneurysms import *
 from microaneurysmdetection import *
@@ -7,6 +9,7 @@ from optical_disk import *
 from text import *
 from fpdf import FPDF
 import tempfile
+
 
 # Background color of app
 page_bg_img = """
@@ -17,9 +20,6 @@ page_bg_img = """
 </style>
 """
 st.markdown(page_bg_img, unsafe_allow_html=True)
-
-# Title
-# Variables for caption and description font size for later use
 
 class PDF(FPDF):
     
@@ -65,86 +65,59 @@ class PDF(FPDF):
         # Page number
         self.cell(0,10, f'Page {self.page_no()}/{{nb}}', align='C')
 
-    # Creates the introduction page included original eye image and other information if needed
-    def intro_page(self,uploaded_image):
-        # Font
-        self.set_font("Courier", size=10)
-        # Calculate pdf width
-        doc_w = self.w
-        # Image caption 
-        cap = "Original Eye Image"
-        # Calculate caption width and position
-        cap_w = self.get_string_width(cap)
-        self.set_x((doc_w - cap_w) / 2)
-        # Add caption
-        self.cell(cap_w, 10, txt=cap, ln=1,align="C")
-        # Convert image to RGB be displayed 
-        uploaded_image = Image.fromarray(cv2.cvtColor(uploaded_image, cv2.COLOR_BGR2RGB)).convert("RGB")
-        temp_filename = f"original_image.jpg"
-        uploaded_image.save(temp_filename)
-        # Calculate image width and position
-        img_w = 100
-        doc_w = self.w
-        img_x = (doc_w - img_w) / 2
-        img_y = self.get_y()
-        # Display image
-        self.image(temp_filename, x=img_x, y=img_y, w=img_w)
-        os.remove(temp_filename)
+    # Segmentation Content - Add images in a grid
+    def eye_seg(self, idx, img, cap, description):
+        img_w, img_h = 50, 50  # Adjust image width and height
+        margin = 10  # Margin between images
+        images_per_row = 3
+        x_start = 10  # Starting X position
+        y_start = self.get_y()  # Starting Y position
+        
+        # Calculate the row and column for the current image
+        row = idx // images_per_row
+        col = idx % images_per_row
+        
+        x_position = x_start + col * (img_w + margin)
+        if idx < 3:
+            y_position = 30
+        else:
+            y_position = 140
+        self.set_xy(x_position, y_position)
 
-    # Segmentation Content
-    def eye_seg(self,idx,img, cap, description):
-        # Add page
-        self.add_page()
-        # Font sizes for caption and description of images
-        cap_s = 10
-        desc_s = 10
-        # Calculate pdf width
-        doc_w = self.w
-        # Font
-        self.set_font("Times", "I", size=cap_s)
-        # Calculate width of caption and position
+        self.set_font("Times", "I", size=8)
         cap_w = self.get_string_width(cap)
-        self.set_x((doc_w - cap_w) / 2)
-        # Add caption
         self.cell(cap_w, 10, txt=cap, ln=1, align='C')
-        # Convert PIL image to RGB and save it temporarily with a unique filename
-        img = img.convert("RGB")
-        temp_filename = f"temp_image_{idx}.jpg"
-        img.save(temp_filename)
-        # Calculate image width and position
-        img_w = 100
-        doc_w = self.w
-        img_x = (doc_w - img_w) / 2
-        img_y = self.get_y()
-        # Add image
-        self.image(temp_filename, x=img_x, y=img_y, w=img_w)
+        
+        if idx != 0:
+            img = img.convert("RGB")
+            temp_filename = f"temp_image_{idx}.jpg"
+            img.save(temp_filename)
+        else:
+            file_bytes = np.asarray(bytearray(img.read()), dtype=np.uint8)
+            img = cv2.imdecode(file_bytes, 1)
+            img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)).convert("RGB")
+            temp_filename = f"original_image.jpg"
+            img.save(temp_filename)
 
-        # Add description
-        desc_y = self.get_y() + img_w
-        self.set_xy(20,desc_y)
-        self.set_font("Times", size=desc_s)
-        self.multi_cell(0, 10, txt = description, align='L')
-
-        os.remove(temp_filename)  # Remove the temporary file after adding it to the PDF
-    
+        self.image(temp_filename, x=x_position, y=self.get_y(), w=img_w, h=img_h)
+        os.remove(temp_filename)
+        
+        self.set_xy(x_position, self.get_y() + img_h + margin)
+        self.set_font("Times", size=8)
+        self.multi_cell(img_w, 10, txt=description, align='L')
+        self.set_y(y_position)
 
 # Function to generate PDF
-def generate_pdf(images,uploaded_image):
-
-    # Create and set pdf object
+def generate_pdf(images, uploaded_image):
     pdf = PDF()
     pdf.set_auto_page_break(auto=True, margin=15)
-    # get total page numbers and add a page to start
     pdf.alias_nb_pages()
     pdf.add_page()
-    # Create the intro page (includes original eye image)
-    pdf.intro_page(uploaded_image)
 
-    # Run through all images and display them along with their caption and description
-    # Takes in 3 parameters from session state images list (image, caption, and description)
     for idx, (img, cap, description) in enumerate(images): 
-        pdf.eye_seg(idx, img, cap, description)
-    # Return file 
+        if idx != -1:
+            pdf.eye_seg(idx, img, cap, description)
+    
     pdf_file = "diabetic_retinopathy_results.pdf"
     pdf.output(pdf_file)
     return pdf_file
@@ -178,20 +151,29 @@ if __name__ == '__main__':
         st.session_state.images = []
     if 'buttons' not in st.session_state:
         st.session_state.buttons = {1: None, 2: None, 3: None, 4: None, 5: None}
+    if 'original_added' not in st.session_state:
+        st.session_state.original_added = False
 
     # Check if an image was uploaded
     if uploaded_file is not None:
         # Convert the uploaded file to an OpenCV image
         file_bytes = np.asarray(bytearray(uploaded_file.read()), dtype=np.uint8)
         uploaded_image = cv2.imdecode(file_bytes, 1)
+
+        # Adds original image if not added
+        if not st.session_state.original_added:
+            # Resets image list and button state
+            st.session_state.buttons = {1: None, 2: None, 3: None, 4: None, 5: None}
+            st.session_state.images = []
+            img = uploaded_file
+            cap = "Displaying original eye image"
+            description = "This is the original eye image that was uploaded for segmentation analysis"  # Find text for description in text.py file
+            st.session_state.images.append((img, cap, description))
+            st.session_state.original_added = True
     # If empty reset the session states for images and buttons.
     else:
-        st.session_state.buttons = {1: None, 2: None, 3: None, 4: None, 5: None}
-        st.session_state.images = []
+        st.session_state.original_added = False
         
-    # # Display original image 
-    # bl1,img_org,bl2 = st.columns([2,1,2.5])
-    
 
     # Create variables for output analyzed images 
     microaneurysmsdet = None
@@ -203,21 +185,26 @@ if __name__ == '__main__':
      
     # Microaneurysms and Soft Exudate Buttons
     col1,img_org,col2= st.columns([1,1,1],vertical_alignment="bottom") 
-    with img_org:
-            if uploaded_file is not None:
-                st.image(uploaded_file, caption="Original Eye Image", use_column_width=True)
+    # with img_org:
+    #         if uploaded_file is not None:
+    #             st.image(uploaded_file, caption="Original Eye Image", use_column_width=True)
+
     # Creates first button, if pressed add images plus caption and description to session state image list
     if col1.button("Microaneurysms",use_container_width=True,help="Uploads image for microaneurysm detection") and uploaded_file is not None:
+        # Run algorithm and get analyzed image
         microaneurysms = extract_microaneurysms(uploaded_image)
         microaneurysms = Image.fromarray(microaneurysms)
+        # Add caption and description and call button function
         caption = "Displaying microaneurysms in eye"
         description = image_desc[0] # Find text for description in text.py file
         handle_button_click(1, microaneurysms, caption, description) # Function call to add images to list
 
     # Creates second button, if pressed add images plus caption and description to session state image list
     if col2.button("Soft Exudates",use_container_width=True,help="Uploads image for soft exudate detection") and uploaded_file is not None:
+        # Run algorithm and get analyzed image
         soft_exudates = extract_microaneurysmsdet(uploaded_image)
         soft_exudates = Image.fromarray(soft_exudates)
+        # Add caption and description and call button function
         caption = "Displaying soft exudates in eye"
         description = image_desc[1] # Find text for description in text.py file
         handle_button_click(2, soft_exudates, caption, description)
@@ -227,43 +214,52 @@ if __name__ == '__main__':
     
     # Creates third button, if pressed add images plus caption and description to session state image list
     if col3.button("bvsegment",use_container_width=True,help="Uploads image for blood vessel segmentation") and uploaded_file is not None:
+        # Run algorithm and get analyzed image
         bvsegment = extract_bv(uploaded_image)
         bvsegment = Image.fromarray(bvsegment)
+        # Add caption and description and call button function
         caption = "Displaying blood vessels in eye"
         description = image_desc[2] # Find text for description in text.py file
         handle_button_click(3, bvsegment, caption, description)
 
     # Creates fourth button, if pressed add images plus caption and description to session state image list
     if col4.button("Optical Disk",use_container_width=True,help="Uploads image for optical disk segmentation") and uploaded_file is not None:
+        # Run algorithm and get analyzed image
         optical_disk_result = extract_opticdisk(uploaded_image)
         if isinstance(optical_disk_result, tuple):
-            optical_disk = optical_disk_result[0]  # Adjust this index based on your function's return value
+            optical_disk = optical_disk_result[0]  # Adjust this index based on your function's return value, changing it will change image output
         else:
             optical_disk = optical_disk_result
         optical_disk = Image.fromarray(optical_disk)
+        # Add caption and description and call button function
         caption = "Displaying optical disk in eye"
         description = image_desc[3] # Find text for description in text.py file
         handle_button_click(4, optical_disk, caption, description)
    
     # Creates fifth button, if pressed add images plus caption and description to session state image list
     if col5.button("Hard Exudates",use_container_width=True,help="Uploads image for hard exudates detection") and uploaded_file is not None:
+        # Run algorithm and get analyzed image
         hard_exudates = extract_microaneurysmsdet(uploaded_image)
         hard_exudates = Image.fromarray(hard_exudates)
+        # Add caption and description and call button function
         caption = "Displaying hard exudates in eye"
         description = image_desc[4] # Find text for description in text.py file
         handle_button_click(5, hard_exudates, caption, description)
     
     st.subheader("Segmentation Results:")
-    anl_img1, bl1, anl_img2 = st.columns([0.4,0.1,0.4],vertical_alignment="center",gap="large")
+    anl_img1, bl1, anl_img2, bl2, anl_img3 = st.columns([0.3,0.05,0.3,0.05,0.3],vertical_alignment="center",gap="large")
 
-    # Display all images in two columns
+    # Display all images in two rows
     if uploaded_file is not None and st.session_state.images:
         for idx, (img, cap, description) in enumerate(st.session_state.images):
-            if idx % 2 == 0:
+            if idx % 3 == 0 :
                 with anl_img1:
                     st.image(img, caption=cap,use_column_width=True)
-            else:
+            elif idx % 3 == 1:
                 with anl_img2:
+                    st.image(img, caption=cap, use_column_width=True)
+            else:
+                with anl_img3:
                     st.image(img, caption=cap, use_column_width=True)
     
     # Short individual descriptions on microaneurysms, blood vessels, hard exudates, and soft exudates. Find in text.py file
@@ -272,7 +268,7 @@ if __name__ == '__main__':
     # Button to generate and download PDF
     if st.button("Generate PDF"):
         if st.session_state.images:
-            pdf_file = generate_pdf(st.session_state.images,uploaded_image)
+            pdf_file = generate_pdf(st.session_state.images, uploaded_image)
             with open(pdf_file, "rb") as f:
                 if st.download_button("Download PDF", f, file_name="diabetic_retinopathy_results.pdf"):
                     pdf_file = None
