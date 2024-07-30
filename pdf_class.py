@@ -1,5 +1,6 @@
 import cv2
 import os
+import numpy as np
 from PIL import Image
 from fpdf import FPDF
 from text import *
@@ -49,92 +50,59 @@ class PDF(FPDF):
         # Page number
         self.cell(0,10, f'Page {self.page_no()}/{{nb}}', align='C')
 
-    # Creates the introduction page - includes original eye image and other information if needed
-    def intro_page(self,uploaded_image):
-        # Font
-        self.set_font("Courier", size=10)
-        # Calculate pdf width
-        doc_w = self.w
-        # Image caption 
-        cap = "Original Eye Image"
-        # Calculate caption width and position
-        cap_w = self.get_string_width(cap)
-        self.set_x((doc_w - cap_w) / 2)
-        # Add caption
-        self.cell(cap_w, 10, txt=cap, ln=1,align="C")
-        # Convert image to RGB be displayed 
-        uploaded_image = Image.fromarray(cv2.cvtColor(uploaded_image, cv2.COLOR_BGR2RGB)).convert("RGB")
-        temp_filename = f"original_image.jpg"
-        uploaded_image.save(temp_filename)
-        # Calculate image width and position
-        img_w = 100 # Adjustable
-        doc_w = self.w
-        img_x = (doc_w - img_w) / 2
-        img_y = self.get_y()
-        # Display image
-        self.image(temp_filename, x=img_x, y=img_y, w=img_w)
-        os.remove(temp_filename)
-        # Calculate description position
-        desc_y = self.get_y() + img_w
-        self.set_xy(20,desc_y)
-        self.set_font("Times", size=10)
-        # Add description
-        self.multi_cell(0, 10, txt = "Place holder text Place holder text Place holder text", align='L')
+    # Segmentation Content - Add images in a grid
+    def eye_seg(self, idx, img, cap, description):
+        img_w, img_h = 50, 50  # Adjust image width and height
+        margin = 10  # Margin between images
+        images_per_row = 3
+        x_start = 21  # Starting X position
+        y_start = self.get_y()  # Starting Y position
+        
+        # Calculate the row and column for the current image
+        row = idx // images_per_row
+        col = idx % images_per_row
+        
+        x_position = x_start + col * (img_w + margin)
+        if idx < 3:
+            y_position = 30
+        else:
+            y_position = 140
+        self.set_xy(x_position, y_position)
 
-    # Segmentation Content - Add a page for each eye image
-    def eye_seg(self,idx,img, cap, description):
-        # Add page
-        self.add_page()
-        # Font sizes for caption and description of images
-        cap_s = 10 # Adjustable
-        desc_s = 10
-        # Calculate pdf width
-        doc_w = self.w
-        # Font
-        self.set_font("Times", "I", size=cap_s)
-        # Calculate width of caption and position
+        self.set_font("Times", "I", size=8)
         cap_w = self.get_string_width(cap)
-        self.set_x((doc_w - cap_w) / 2)
-        # Add caption
         self.cell(cap_w, 10, txt=cap, ln=1, align='C')
-        # Convert PIL image to RGB and save it temporarily with a unique filename
-        img = img.convert("RGB")
-        temp_filename = f"temp_image_{idx}.jpg"
-        img.save(temp_filename)
-        # Calculate image width and position
-        img_w = 100
-        doc_w = self.w
-        img_x = (doc_w - img_w) / 2
-        img_y = self.get_y()
-        # Add image
-        self.image(temp_filename, x=img_x, y=img_y, w=img_w)
-        # Calculate position of description
-        desc_y = self.get_y() + img_w
-        self.set_xy(20,desc_y)
-        self.set_font("Times", size=desc_s)
-        # Add description
-        self.multi_cell(0, 10, txt = description, align='L')
+        
+        if idx != 0:
+            img = img.convert("RGB")
+            temp_filename = f"temp_image_{idx}.jpg"
+            img.save(temp_filename)
+        else:
+            file_bytes = np.asarray(bytearray(img.read()), dtype=np.uint8)
+            img = cv2.imdecode(file_bytes, 1)
+            img = Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB)).convert("RGB")
+            temp_filename = f"original_image.jpg"
+            img.save(temp_filename)
 
-        os.remove(temp_filename)  # Remove the temporary file after adding it to the PDF
-    
+        self.image(temp_filename, x=x_position, y=self.get_y(), w=img_w, h=img_h)
+        os.remove(temp_filename)
+        
+        self.set_xy(x_position, self.get_y() + img_h + margin)
+        self.set_font("Times", size=8)
+        self.multi_cell(img_w, 4, txt=description, align='L')
+        self.set_y(y_position)
 
 # Function to generate PDF
-def generate_pdf(images,uploaded_image):
-
-    # Create and set pdf object
+def generate_pdf(images, uploaded_image):
     pdf = PDF()
     pdf.set_auto_page_break(auto=True, margin=15)
-    # get total page numbers and add a page to start
     pdf.alias_nb_pages()
     pdf.add_page()
-    # Create the intro page (includes original eye image)
-    pdf.intro_page(uploaded_image)
 
-    # Run through all images and display them along with their caption and description
-    # Takes in 3 parameters from session state images list (image, caption, and description)
     for idx, (img, cap, description) in enumerate(images): 
-        pdf.eye_seg(idx, img, cap, description)
-    # Return file 
+        if idx != -1:
+            pdf.eye_seg(idx, img, cap, description)
+    
     pdf_file = "diabetic_retinopathy_results.pdf"
     pdf.output(pdf_file)
     return pdf_file
