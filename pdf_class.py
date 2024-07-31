@@ -61,22 +61,30 @@ class PDF(FPDF):
         # Calculate the row and column for the current image
         row = idx // images_per_row
         col = idx % images_per_row
-        
+
+        # Set x an y position
         x_position = x_start + col * (img_w + margin)
         if idx < 3:
             y_position = 30
         else:
-            y_position = 140
-        self.set_xy(x_position, y_position)
-
-        self.set_font("Times", "I", size=8)
+            y_position = 115
+        # Set font type and size for caption
+        self.set_font("Times", size=10)
+        # Calculate and set caption x_position
         cap_w = self.get_string_width(cap)
+        center_x = (img_w - cap_w) / 2
+        self.set_xy(x_position + center_x, y_position)
+        # Write caption
         self.cell(cap_w, 10, txt=cap, ln=1, align='C')
-        
+        # Reset x_position for image 
+        self.set_x(x_position)
+
+        # Convert all images besides original to RGB directly
         if idx != 0:
             img = img.convert("RGB")
             temp_filename = f"temp_image_{idx}.jpg"
             img.save(temp_filename)
+        # If original image convert using cv2
         else:
             file_bytes = np.asarray(bytearray(img.read()), dtype=np.uint8)
             img = cv2.imdecode(file_bytes, 1)
@@ -84,25 +92,28 @@ class PDF(FPDF):
             temp_filename = f"original_image.jpg"
             img.save(temp_filename)
 
+        # Display image
         self.image(temp_filename, x=x_position, y=self.get_y(), w=img_w, h=img_h)
         os.remove(temp_filename)
-        
-        self.set_xy(x_position, self.get_y() + img_h + margin)
+        # Set position for image description 
+        self.set_xy(x_position, self.get_y() + img_h + 5)
+        # Set font
         self.set_font("Times", size=8)
+        # Write description
         self.multi_cell(img_w, 4, txt=description, align='L')
-        self.set_y(y_position)
-
+        
 # Function to generate PDF
 def generate_pdf(images, uploaded_image):
+    # Create a PDF object set page break, numbering, and add a page
     pdf = PDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.alias_nb_pages()
     pdf.add_page()
-
+    # Loop through session state image list
     for idx, (img, cap, description) in enumerate(images): 
         if idx != -1:
             pdf.eye_seg(idx, img, cap, description)
-    
+    # Return pdf file
     pdf_file = "diabetic_retinopathy_results.pdf"
     pdf.output(pdf_file)
     return pdf_file
